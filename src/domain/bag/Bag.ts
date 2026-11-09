@@ -5,8 +5,8 @@ import { BagError } from "../errors/BagError.js";
 
 
 export class Bag {
-    items: Item[]
-    maxWeight: number
+    private items: Item[] // só os métodos da Bag mexem na lista
+    readonly maxWeight: number  // todos leem, ninguém troca
     constructor(maxWeight: number) {
         this.maxWeight = maxWeight
         this.items = []
@@ -18,11 +18,28 @@ export class Bag {
 
             }
             
-            this.items.push(item)
+           this.items.push(item)
+        }
+
+        remove(id: number): Item {
+            const foundItem = this.items.find((item) => {
+                    return item.id === id
+            } ) 
+
+            if(!foundItem){
+                throw new BagError("Item não encontrado")
+            }
+
+            const newBag = this.items.filter((item) => {
+                return item.id !== foundItem.id
+            })
+
+            this.items = newBag
+            return foundItem
         }
 
         list(): Item[] {
-            return this.items
+            return [...this.items]
         }
 
         totalWeight(): number {

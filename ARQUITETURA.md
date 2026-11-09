@@ -1,117 +1,182 @@
 # Mochila de Itens: arquitetura e roteiro
 
-> Mapa do projeto do começo ao fim. Ele mostra **onde cada coisa vai morar** e **em que ordem** vamos construir.
-> Não tem código pronto aqui: quem escreve o código é o Jonas. Os nomes de classes e métodos são uma **sugestão**
-> e podem mudar no caminho.
+> Mapa do projeto do começo ao fim: **onde cada coisa vai morar** e **em que ordem** vamos construir.
+> Não tem código pronto aqui: quem escreve o código é o Jonas. Os nomes são uma **sugestão** e podem mudar.
 >
-> Criado em 30/10/2026. Marque `[x]` em cada etapa quando terminar.
+> Criado em 30/10/2026. **Atualizado em 04/11/2026**: o back-end usa o mesmo stack do projeto do restaurante
+> (Express + Zod + Knex + SQLite) e o front-end é React + Vite + Tailwind. ORM e Docker saíram do projeto.
+> Objetivo: reaproveitar o que já pratiquei no restaurante e aprender um front-end moderno, com práticas de mercado.
+> Marque `[x]` em cada etapa quando terminar.
 
 ---
 
-## 1. Visão geral
+## 1. Stack
 
-```
- FASE 1                     FASE 2                         FASE 3
- ┌──────────────┐           ┌──────────────────────┐       ┌──────────────────────┐
- │   DOMÍNIO    │  usado →  │         API          │  ←──  │      FRONT-END       │
- │ (as regras)  │   pela    │ Express + Zod        │ fetch │ React + Tailwind     │
- │ Item, Mochila│           │ dados em memória     │       │ grade de "slots"     │
- └──────────────┘           └──────────────────────┘       └──────────────────────┘
-                                                            FASE 4: banco (ORM) + Docker
-```
+| Parte | Tecnologias |
+|---|---|
+| Base | Node + TypeScript 7 (`tsx` em modo watch), ESM (`"type": "module"`, imports com `.js`), `verbatimModuleSyntax` (`import type`) |
+| Domínio (fase 1) | só TypeScript, sem bibliotecas |
+| Back-end (fase 2) | **Express 5**, **Zod 4**, **Knex 3 + SQLite** (driver `sqlite3`) |
+| Front-end (fase 3) | **React + Vite + Tailwind** (TypeScript), consumindo a API |
+| Ferramentas | Insomnia (testar a API, variável `BASE_URL`), Beekeeper Studio (ver o banco) |
 
-**Ideia central:** as **regras do jogo** (peso máximo, usar poção etc.) ficam nas classes da fase 1.
-A API (fase 2) **não reescreve essas regras**: ela só recebe o pedido, chama a mochila e devolve a resposta.
+As versões são conferidas na hora de começar cada fase, porque as bibliotecas mudam.
 
-> Analogia: o domínio é o **cozinheiro**, que sabe fazer o prato. A API é o **garçom**, que leva o pedido até
-> a cozinha e traz o prato. O front-end é o **cardápio na mesa**. O garçom não cozinha.
+**Padrões que vêm do projeto do restaurante** (para repetir aqui):
+- `server.ts` → `routes/index.ts` → arquivos de rotas → controllers (classes com `index`, `show`, `create`, `remove`...)
+  com `try/catch/next`;
+- middleware de erro global: `BagError` → status dele, `ZodError` → 400 com `z.flattenError`, resto → 500;
+- status: 200 ok, 201 criado, 400 validação, 404 não encontrado, 409 conflito (ex.: mochila cheia), 500 inesperado;
+- a mesma rota responde **sempre no mesmo formato**;
+- `knexfile.ts` com `PRAGMA foreign_keys = ON` e `useNullAsDefault`; conexão em `src/database/knex.ts`;
+- tipos das tabelas em arquivos `.d.ts` (`src/database/types/`), importados com `import type`;
+- scripts: `npm run dev` (servidor) e `npm run knex -- <comando>` (migrations e seeds);
+- imports relativos (sem `@/`); importar a **conexão** nos controllers, nunca a biblioteca `"knex"`.
 
 ---
 
-## 2. Estrutura de pastas (onde vamos chegar)
+## 2. Visão geral
 
 ```
-mochila-de-itens/
+ FASE 1                     FASE 2                                   FASE 3
+ ┌──────────────┐           ┌──────────────────────────────┐         ┌──────────────────┐
+ │   DOMÍNIO    │  usado →  │            API               │  ←────  │    FRONT-END     │
+ │ (as regras)  │   pela    │ Express + Zod                │  fetch  │  React + Vite    │
+ │              │           │                              │         │  + Tailwind      │
+ │ Item, Bag... │           │ 2A: dados em memória         │         │ grade de "slots" │
+ └──────────────┘           │ 2B: dados no SQLite (Knex)   │         └──────────────────┘
+                            └──────────────────────────────┘
+```
+
+**Ideia central:** as **regras** (peso máximo, item não encontrado, usar poção) ficam nas classes da fase 1.
+A API **não reescreve essas regras**. Em cada pedido ela faz:
+
+1. **carregar** os dados (da memória na 2A, do banco na 2B) e montar os objetos (`Bag`, `Item`);
+2. **chamar o método** da classe (`add`, `remove`, `use`), que aplica a regra ou lança um `BagError`;
+3. **salvar** o resultado e responder.
+
+Por isso a fase 2 é dividida em duas: primeiro a API funcionando em memória (2A), depois a troca da memória
+pelo banco (2B). Uma coisa nova de cada vez.
+
+---
+
+## 3. Estrutura de pastas (onde vamos chegar)
+
+```
+mochila-de-itens/                  ← BACK-END (este projeto)
 ├─ package.json
 ├─ tsconfig.json
-├─ ARQUITETURA.md                ← este arquivo
+├─ knexfile.ts                     ← FASE 2B
+├─ ARQUITETURA.md                  ← este arquivo
 └─ src/
-   ├─ index.ts                   ← FASE 1: "laboratório" de testes com console.log
+   ├─ index.ts                     ← FASE 1: laboratório de testes com console.log
    │
-   ├─ dominio/                   ← FASE 1: as regras (não sabe nada de Express)
-   │  ├─ tipos/
-   │  │  └─ Raridade.ts          ← "comum" | "raro" | "epico"
-   │  ├─ interfaces/
-   │  │  └─ Usavel.ts            ← contrato "itens que podem ser usados"
-   │  ├─ itens/
-   │  │  ├─ Item.ts              ← classe base (abstrata)
-   │  │  ├─ Arma.ts
-   │  │  ├─ Pocao.ts
-   │  │  └─ Armadura.ts
-   │  ├─ mochila/
-   │  │  └─ Mochila.ts
-   │  └─ erros/
-   │     └─ MochilaError.ts
+   ├─ domain/                      ← FASE 1: as regras (não sabe nada de Express nem de banco)
+   │  ├─ types/Rarity.ts           ✅
+   │  ├─ interfaces/Usable.ts
+   │  ├─ items/
+   │  │  ├─ Item.ts                ✅ (vai virar abstrata)
+   │  │  ├─ Weapon.ts
+   │  │  ├─ Potion.ts
+   │  │  └─ Armor.ts
+   │  ├─ bag/Bag.ts                ✅ (add, list, totalWeight, remove)
+   │  └─ errors/BagError.ts        ✅
    │
-   ├─ server.ts                  ← FASE 2 em diante
+   ├─ server.ts                    ← FASE 2A em diante
    ├─ routes/
    ├─ controllers/
-   ├─ schemas/                   ← validações com Zod
-   ├─ middlewares/               ← tratamento de erro
-   └─ dados/                     ← a "memória" da API (catálogo + mochila)
+   ├─ schemas/                     ← validações com Zod
+   ├─ middlewares/                 ← tratamento de erro (BagError → status HTTP)
+   ├─ data/                        ← FASE 2A: a "memória" (catálogo + mochila)
+   └─ database/                    ← FASE 2B
+      ├─ knex.ts                   ← a conexão
+      ├─ migrations/
+      ├─ seeds/
+      ├─ types/                    ← tipos das tabelas (.d.ts), ex.: ItemRepository
+      └─ db.sqlite                 ← o arquivo do SQLite
 
-mochila-front/                   ← FASE 3: projeto SEPARADO, numa pasta ao lado
+mochila-front/                     ← FASE 3: projeto SEPARADO (Vite + React + Tailwind), numa pasta ao lado
+└─ src/
+   ├─ main.tsx                     ← ponto de entrada (o Vite cria)
+   ├─ App.tsx
+   ├─ components/                  ← ItemSlot, BagGrid, WeightBar...
+   ├─ services/api.ts              ← as chamadas fetch para a API
+   └─ types/                       ← o formato das respostas da API
 ```
-
-Por que `dominio/` desde o começo? Para que na fase 2 a gente **não precise mover nada**:
-o `server.ts` e as rotas só vão importar o que já existe.
 
 ---
 
-## 3. O modelo (as classes e o que cada uma sabe)
+## 4. O modelo (classes)
 
 ```
                  ┌───────────────────────────┐
                  │   Item  (abstrata)        │
-                 │ id, nome, peso, raridade  │
-                 │ descrever()               │
+                 │ id, name, weight, rarity  │
+                 │ describe()                │
                  └─────────────┬─────────────┘
                    extends     │
         ┌──────────────────────┼──────────────────────┐
  ┌──────┴──────┐        ┌──────┴──────┐        ┌──────┴──────┐
- │   Arma      │        │   Pocao     │        │  Armadura   │
- │   dano      │        │   cura      │        │   defesa    │
- └─────────────┘        │   usar()    │        └─────────────┘
+ │   Weapon    │        │   Potion    │        │   Armor     │
+ │   damage    │        │   heal      │        │   defense   │
+ └─────────────┘        │   use()     │        └─────────────┘
                         └──────┬──────┘
                     implements │
                         ┌──────┴──────┐
-                        │  «Usavel»   │  (interface)
-                        │  usar()     │
+                        │  «Usable»   │  (interface)
+                        │  use()      │
                         └─────────────┘
 
  ┌────────────────────────────────────────────┐
- │ Mochila                                    │
- │ pesoMaximo   (readonly)                    │
- │ itens: Item[] (private: ninguém mexe fora) │  ← uma LISTA de itens
- │ pesoTotal    (getter)                      │
- │ adicionar(item) / remover(id) / listar()   │
- │ usar(id)                                   │
+ │ Bag                                        │
+ │ maxWeight   (readonly)                     │
+ │ items: Item[] (private)                    │
+ │ add(item) / remove(id) / list()            │
+ │ totalWeight() / use(id)                    │
  └────────────────────────────────────────────┘
 ```
 
-**Pergunta-chave para cada método:** "ele recebe/devolve **UM** item ou **UMA LISTA** de itens?"
-
-| Método (sugestão) | Recebe | Devolve | Quando dá erro |
+| Método | Recebe | Devolve | Quando dá erro |
 |---|---|---|---|
-| `adicionar` | UM item | nada (ou o item) | se passar do peso máximo |
-| `remover` | UM id | o item removido | se o id não existir |
-| `listar` | nada | uma LISTA (cópia) | nunca (lista vazia é normal!) |
-| `pesoTotal` | nada | um número | nunca (mochila vazia = 0) |
-| `usar` | UM id | o efeito/mensagem | id não existe **ou** item não é usável |
+| `add` | UM item | nada (`void`) | se passar do peso máximo |
+| `remove` | UM id | o item removido | se o id não existir |
+| `list` | nada | uma LISTA | nunca (lista vazia é normal) |
+| `totalWeight` | nada | um número | nunca (mochila vazia = 0) |
+| `use` | UM id | o efeito/mensagem | id não existe **ou** item não é usável |
 
 ---
 
-## 4. Roteiro
+## 5. O banco (fase 2B)
+
+```
+ items (catálogo)                 bags                        bag_items
+ ┌──────────────────────┐         ┌──────────────────┐        ┌────────────────────────┐
+ │ id                   │         │ id               │        │ id                     │
+ │ name                 │         │ max_weight       │        │ bag_id   → bags.id     │
+ │ weight               │         └──────────────────┘        │ item_id  → items.id    │
+ │ rarity               │                                     └────────────────────────┘
+ │ type (weapon/potion/ │
+ │       armor)         │
+ │ damage  (ou null)    │
+ │ heal    (ou null)    │
+ │ defense (ou null)    │
+ └──────────────────────┘
+```
+
+- **`items`**: o catálogo do jogo, ou seja, todos os itens que existem.
+- **`bags`**: as mochilas. Por enquanto vai existir só uma.
+- **`bag_items`**: quais itens estão em qual mochila. Cada linha = **um item dentro de uma mochila**
+  (as mochilas cheias crescem em **linhas**, e não em colunas).
+- O **peso total não é guardado** no banco: ele é **calculado** pelo `totalWeight()`.
+- Os 3 tipos de item ficam na **mesma tabela**, com a coluna `type`. As colunas específicas de cada tipo
+  ficam `null` nos outros tipos (ex.: uma poção tem `damage` = `null`).
+
+**Decisão para a fase 2B:** quando o banco entrar, o `remove` e o `use` vão receber o `id` de qual tabela?
+(Pista: se a mesma poção estiver 2 vezes na mochila, o `id` do catálogo é igual nas duas.)
+
+---
+
+## 6. Roteiro
 
 Cada etapa tem **um conceito novo no máximo**. Só passe para a próxima quando os testes da etapa passarem.
 
@@ -125,97 +190,105 @@ Cada etapa tem **um conceito novo no máximo**. Só passe para a próxima quando
 
 ### FASE 1: só TypeScript e POO (sem servidor)
 
-Todos os testes desta fase são feitos no `src/index.ts`, com `console.log`.
-
-| # | Etapa | Conceito novo | Pronto quando... |
-|---|---|---|---|
-| 1 | [ ] Classe `Item` simples (id, nome, peso) | revisão: `class`, `constructor`, `this` | consigo criar 2 itens e imprimir os dados |
-| 2 | [ ] Separar em arquivos (`Item.ts` + import no `index.ts`) | `export` / `import` com `.js` | o mesmo teste funciona importando |
-| 3 | [ ] Tipo `Raridade` e campo `raridade` no Item | **união de tipos** | o TS reclama se eu escrever `"lendario"` |
-| 4 | [ ] `Mochila` com uma lista de itens, `adicionar` e `listar` | lista de objetos (`Item[]`) | adiciono 3 itens e listo os 3 |
-| 5 | [ ] `pesoTotal` | percorrer/somar uma lista | mochila vazia = 0; com itens = soma certa |
-| 6 | [ ] Peso máximo + erro ao passar do limite | `throw` + `try/catch` | erro só quando **passa** do limite (igual ao limite pode) |
-| 7 | [ ] Classe de erro própria `MochilaError` | `extends Error` | o `catch` mostra a minha mensagem |
-| 8 | [ ] `remover(id)` | buscar na lista (`find`/`findIndex`/`filter`) | remove o certo; id inexistente dá erro |
-| 9 | [ ] Proteger a lista da mochila | **encapsulamento**: `private`, `readonly`, getter | `mochila.itens.push(...)` por fora dá erro do TS |
-| 10 | [ ] `Arma`, `Pocao`, `Armadura` herdando de `Item` | **herança**: `extends`, `super` | cada um tem o campo dele + os campos do Item |
-| 11 | [ ] Tornar `Item` abstrato | **classe abstrata** | `new Item(...)` dá erro; `new Arma(...)` funciona |
-| 12 | [ ] `descrever()` diferente em cada item | **polimorfismo** | listar a mochila mostra cada item do seu jeito |
-| 13 | [ ] Interface `Usavel` na `Pocao` | **interface**, `implements` | o TS cobra o `usar()` na Pocao |
-| 14 | [ ] `mochila.usar(id)`: a poção some depois de usada | **narrowing** (descobrir se o item é usável) | poção some; usar espada dá erro claro |
-| 15 | [ ] Revisão final da fase 1 | (nenhum) | checklist de testes da seção 5 completa |
-| 16 | [ ] *(opcional)* um método genérico, ex.: buscar itens de um tipo | **generics** | só se a fase 1 estiver tranquila |
+| # | Etapa | Conceito novo |
+|---|---|---|
+| 1 | [x] Classe `Item` (id, name, weight) | revisão: `class`, `constructor`, `this` |
+| 2 | [x] Separar em arquivos | `export` / `import` com `.js` |
+| 3 | [x] Tipo `Rarity` | **união de tipos** |
+| 4 | [x] `Bag` com `add` e `list` | método, lista de objetos (`Item[]`) |
+| 5 | [x] `totalWeight` | loop `for...of`, acumulador |
+| 6 | [x] Peso máximo + erro ao passar do limite | `throw` + `try/catch`, método chamando método |
+| 7 | [x] `BagError` | **herança** com `extends Error`, `super`, `instanceof` |
+| 8 | [x] `remove(id)` | `find`, `filter`, callback |
+| 9 | [ ] Proteger a lista da mochila | **encapsulamento**: `private`, `readonly` |
+| 10 | [ ] `Weapon`, `Potion`, `Armor` herdando de `Item` | **herança** entre as suas classes |
+| 11 | [ ] Tornar `Item` abstrato | **classe abstrata** |
+| 12 | [ ] `describe()` diferente em cada item | **polimorfismo** |
+| 13 | [ ] Interface `Usable` na `Potion` | **interface**, `implements` |
+| 14 | [ ] `bag.use(id)`: a poção some depois de usada | **narrowing** |
+| 15 | [ ] Revisão final da fase 1 | checklist da seção 7 |
+| 16 | [ ] *(opcional)* um método genérico | **generics** |
 
 ---
 
-### FASE 2: API com Express + Zod (dados em memória)
+### FASE 2A: API com Express + Zod (dados em memória)
 
-Parecido com o projeto do restaurante, mas **sem Knex e sem banco**: a mochila vive na memória
-(se o servidor reiniciar, ela volta vazia; isso é esperado).
+| # | Etapa | Conceito novo |
+|---|---|---|
+| 17 | [ ] Instalar Express, Zod e os tipos; ajustar o `"types"` do `tsconfig`; criar o `server.ts` | (já conhecido) |
+| 18 | [ ] `data/`: um catálogo de itens e **uma** mochila em memória | dados em memória |
+| 19 | [ ] `GET /items` (catálogo) | (já conhecido) |
+| 20 | [ ] `GET /bag` → itens + peso total + peso máximo | formato de resposta fixo |
+| 21 | [ ] `POST /bag/items` (body com o id do catálogo) | Zod no body |
+| 22 | [ ] `DELETE /bag/items/:id` | (já conhecido) |
+| 23 | [ ] `POST /bag/items/:id/use` | (já conhecido) |
+| 24 | [ ] Middleware de erro: `BagError` → 409/404, Zod → 400, outros → 500 | erro do domínio → status HTTP |
+| 25 | [ ] Revisão da API | tabela de testes (status + resposta) |
 
-| # | Etapa | Conceito novo | Pronto quando... |
-|---|---|---|---|
-| 17 | [ ] Instalar Express e Zod, criar `server.ts` | (já conhecido) | servidor sobe e responde algo |
-| 18 | [ ] `dados/`: um catálogo de itens e **uma** mochila | "banco" em memória | os dados existem ao subir |
-| 19 | [ ] `GET /itens` (catálogo) | (já conhecido) | devolve uma lista |
-| 20 | [ ] `GET /mochila` (itens + peso total + peso máximo) | formato de resposta fixo | sempre o mesmo formato, vazia ou cheia |
-| 21 | [ ] `POST /mochila/itens` (body com o id do catálogo) | Zod no body | adiciona; id inválido dá 400 |
-| 22 | [ ] `DELETE /mochila/itens/:id` | (já conhecido) | remove; inexistente dá 404 |
-| 23 | [ ] `POST /mochila/itens/:id/usar` | (já conhecido) | poção some; item não usável dá erro |
-| 24 | [ ] Middleware de erro: `MochilaError` vira status certo | traduzir erro do domínio em HTTP | passar do peso dá 409/422 com mensagem |
-| 25 | [ ] Revisão da API (Insomnia/Postman/HTTP file) | (nenhum) | tabela de testes com status e resposta |
-
-**Regra da fase 2:** o controller **não** calcula peso nem decide se pode adicionar. Quem decide é a `Mochila`.
+**Regra da fase 2:** o controller **não** calcula peso nem decide se pode adicionar. Quem decide é a `Bag`.
 
 ---
 
-### FASE 3: front-end com React + Tailwind (mundo novo)
+### FASE 2B: trocar a memória pelo SQLite (Knex)
 
-Projeto separado (`mochila-front/`). Aqui quase tudo é conceito novo, então os passos serão ainda menores
+| # | Etapa | Conceito novo |
+|---|---|---|
+| 26 | [ ] Instalar Knex e o `sqlite3`, criar o `knexfile.ts` (com `foreign_keys = ON`), a conexão e o script `knex` | (já conhecido) |
+| 27 | [ ] Migration `items` (catálogo, com `type` e as colunas específicas) | colunas que aceitam `null` |
+| 28 | [ ] Migrations `bags` e `bag_items` (chaves estrangeiras) | (praticado no restaurante) |
+| 29 | [ ] Seeds: o catálogo + uma mochila (+ tipos `.d.ts` das tabelas) | (praticado no restaurante) |
+| 30 | [ ] `GET /items` lendo do banco | transformar linha do banco em objeto (`Weapon`, `Potion`...) |
+| 31 | [ ] `GET /bag`: `join` de `bag_items` com `items` e montar a `Bag` | carregar → montar objetos |
+| 32 | [ ] `POST /bag/items`: carregar a `Bag`, chamar `add` (a regra) e salvar em `bag_items` | carregar → regra → salvar |
+| 33 | [ ] `DELETE` e `use` no mesmo esquema | (repetição) |
+| 34 | [ ] Revisão: reiniciar o servidor e os dados continuam lá | |
+
+---
+
+### FASE 3: front-end com React + Vite + Tailwind
+
+Projeto separado (`mochila-front/`). Quase tudo é conceito novo, então os passos serão ainda menores
 e sempre com exemplo antes.
 
 | # | Etapa | Conceito novo |
 |---|---|---|
-| 26 | [ ] Criar o projeto (Vite + React + TS) e rodar a página inicial | ferramenta Vite |
-| 27 | [ ] Primeiro componente mostrando um item fixo | componente, JSX, props |
-| 28 | [ ] Instalar Tailwind e estilizar o "slot" | classes utilitárias |
-| 29 | [ ] Grade de slots com uma lista fixa | `.map()` no JSX, `key` |
-| 30 | [ ] Liberar CORS na API | CORS |
-| 31 | [ ] Buscar a mochila da API | `useState`, `useEffect`, `fetch` |
-| 32 | [ ] Barra de peso (atual / máximo) | estado derivado |
-| 33 | [ ] Botões: adicionar do catálogo, remover, usar | eventos, atualizar a tela após a ação |
-| 34 | [ ] Mostrar erros da API (ex.: "mochila cheia") | estado de erro / carregando |
+| 35 | [ ] Criar o projeto (Vite + React + TS) e rodar a página inicial | Vite |
+| 36 | [ ] Instalar o Tailwind e estilizar um elemento de teste | classes utilitárias |
+| 37 | [ ] Primeiro componente: um slot mostrando um item fixo | componente, JSX, props |
+| 38 | [ ] Grade de slots com uma lista fixa | `.map()` no JSX, `key` |
+| 39 | [ ] Liberar CORS na API | CORS |
+| 40 | [ ] `services/api.ts` + buscar a mochila da API | `fetch`, `useState`, `useEffect` |
+| 41 | [ ] Barra de peso (atual / máximo) | estado derivado |
+| 42 | [ ] Botões: adicionar do catálogo, remover, usar | eventos, atualizar a tela após a ação |
+| 43 | [ ] Mostrar erros da API (ex.: "mochila cheia") e "carregando" | estado de erro / carregando |
+| 44 | [ ] Revisão do front: layout responsivo, componentes organizados | boas práticas |
+
+**Fora do escopo:** itens empilháveis, equipar itens, arrastar e soltar, vários jogadores, login.
 
 ---
 
-### FASE 4: depois (só quando as fases acima estiverem prontas)
-- [ ] Banco de dados com um ORM (escolher na hora, conferindo a versão atual)
-- [ ] Docker para subir API + banco
-- Ideias para o futuro (fora do escopo agora): itens empilháveis, equipar itens, arrastar e soltar, vários jogadores, login.
+## 7. Checklist de testes (usar em TODA etapa)
 
----
-
-## 5. Checklist de testes (usar em TODA etapa)
-
-Antes de dizer "terminei", testar:
-
-- [ ] **Caso normal** (o que eu queria que funcionasse)
+- [ ] **Caso normal**
 - [ ] **Lista vazia**: mochila sem nada (listar, peso total, remover, usar)
 - [ ] **Não existe**: id que não está na mochila
 - [ ] **No limite**: peso exatamente igual ao máximo (pode) e 1 acima (não pode)
 - [ ] **Tipo errado**: usar um item que não é usável
 - [ ] **Mensagem certa**: o texto do erro/sucesso combina com a ação?
 - [ ] **Formato da resposta** (fase 2): sempre o mesmo formato na mesma rota?
+- [ ] **Persistência** (fase 2B): reiniciei o servidor e os dados continuam?
 
-E anotar o resultado numa tabelinha: `caso → esperado → o que aconteceu`.
+Anotar o resultado numa tabela: `caso → esperado → o que aconteceu`.
 
 ---
 
-## 6. Regras do jogo (como vamos trabalhar)
+## 8. Como vamos trabalhar
 
-1. **Um passo pequeno, depois testar.** Nada de escrever três partes antes de rodar.
-2. **Conceito novo = exemplo parecido primeiro** (com outros dados), depois eu faço o meu.
-3. **Pistas e perguntas**, código só quando eu pedir ou travar de vez (explicado pedaço por pedaço).
-4. **Conferir imports** que o editor coloca sozinho antes de aceitar.
-5. **Nomes que dizem a verdade**: `item` guarda UM item, `itens` guarda a LISTA.
-6. Quando o TypeScript reclamar, copiar a mensagem inteira e pedir tradução.
+1. **Objetivo primeiro:** cada etapa começa dizendo **o que o código precisa fazer** (recebe, devolve, quando dá erro).
+2. **Direto ao ponto:** nomear o conceito e a ferramenta (método, loop, `find`...). Metáforas só quando eu pedir.
+3. **Conceito novo = exemplo com outros dados primeiro**, depois eu faço o meu.
+4. **Sem código pronto**: só quando eu pedir ou travar de vez (explicado pedaço por pedaço).
+5. **Um passo pequeno, depois testar.**
+6. **Conferir imports** que o editor coloca sozinho.
+7. **Nomes que dizem a verdade**: `item` guarda UM item, `items` guarda a LISTA.
+8. Quando o TypeScript reclamar, copiar a mensagem inteira e pedir tradução.
