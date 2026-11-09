@@ -1,6 +1,6 @@
 import type { Rarity } from "../types/Rarity.js";
 
-export class Item {
+export abstract class Item {
     //esta é a tipagem que vai ser dentro do objeto que esta sendo criado
     id: number;
     name: string;

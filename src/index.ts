@@ -3,6 +3,7 @@ import { BagError } from "./domain/errors/BagError.js"
 import { Weapon } from "./domain/items/Weapon.js"
 import { Armor } from "./domain/items/Armor.js"
 import { Potion } from "./domain/items/Potion.js"
+import { Item } from "./domain/items/Item.js"
 
 
 const bag1 = new Bag(200)
@@ -10,6 +11,8 @@ const bag1 = new Bag(200)
 const sword = new Weapon(1, 'Excalibur', 200, 'epic', 100)
 const tonic = new Potion(2, 'Tonic of life', 2, 'common', 50)
 const lightShield = new Armor(3, 'Light shield', 30, 'rare', 40)
+
+// const newItem = new Item(9, 'Teste', 1, 'common')
 
 
 
