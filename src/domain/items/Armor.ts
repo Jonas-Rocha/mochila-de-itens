@@ -7,8 +7,8 @@ export class Armor extends Item {
     defense: number
 
 
-    constructor(id: number, name: string, weight: number, rariry: Rarity, defense: number) {
-        super(id, name, weight, rariry)
+    constructor(id: number, name: string, weight: number, rarity: Rarity, defense: number) {
+        super(id, name, weight, rarity)
         this.defense = defense
     }
 }
