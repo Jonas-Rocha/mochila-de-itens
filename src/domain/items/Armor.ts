@@ -11,4 +11,8 @@ export class Armor extends Item {
         super(id, name, weight, rarity)
         this.defense = defense
     }
+
+        describe(): string {
+        return `${this.name} (${this.rarity}) - defesa ${this.defense}`
+    }
 }

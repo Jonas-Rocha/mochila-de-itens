@@ -34,6 +34,13 @@ try {
 
 console.log(bag1)
 
+console.log(sword.describe())
+
+for(const item of bag1.list()) {
+    console.log(item.describe())
+
+}
+
 
 
 

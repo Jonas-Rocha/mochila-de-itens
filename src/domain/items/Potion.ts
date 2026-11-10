@@ -11,5 +11,9 @@ export class Potion extends Item {
         super(id, name, weight, rarity)
         this.heal = heal
     }
+
+        describe(): string {
+        return `${this.name} (${this.rarity}) - cura ${this.heal}`
+    }
 }
 

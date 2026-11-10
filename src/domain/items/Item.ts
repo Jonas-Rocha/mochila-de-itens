@@ -15,4 +15,6 @@ export abstract class Item {
         this.rarity = rarity
 
     }
+
+     abstract describe(): string
 }
