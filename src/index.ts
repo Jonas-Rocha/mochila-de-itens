@@ -3,7 +3,6 @@ import { BagError } from "./domain/errors/BagError.js"
 import { Weapon } from "./domain/items/Weapon.js"
 import { Armor } from "./domain/items/Armor.js"
 import { Potion } from "./domain/items/Potion.js"
-import { Item } from "./domain/items/Item.js"
 
 
 const bag1 = new Bag(200)
@@ -42,15 +41,11 @@ for(const item of bag1.list()) {
 }
 
 
+console.log(tonic.use())
 
 
-
-
-
-
-
-
-
+console.log(bag1.use(2))
+console.log(bag1.list())
 
 
 

@@ -1,5 +1,7 @@
 import type { Item } from "../items/Item.js"; // o item tem uma tipagem dentro da classe... será que importar a tipagem de dentro da classe item funciona? e também: não seria melhor guardar a tipagem do item em outro arquivo já que vou usar em mais de um lugar?
 import { BagError } from "../errors/BagError.js";
+import { Potion } from "../items/Potion.js";
+
 
 
 
@@ -50,6 +52,26 @@ export class Bag {
 
 
             return total
+        }
+
+        use(id: number): string {
+            const foundItem = this.items.find((item) => {
+                return item.id === id
+            })
+
+            if(!foundItem) {
+                throw new BagError('Item não encontrado')
+            }
+
+            if(!(foundItem instanceof Potion)){
+                throw new BagError('Este item não é utilizável')
+            }
+
+                this.remove(foundItem.id)
+
+                return foundItem.use()
+
+        
         }
 
         
